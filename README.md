@@ -4,7 +4,7 @@
   It uses Selenium to scrape book information, Pandas for data processing, and Airflow to schedule and manage tasks.
 
 
-- Python (selenium, pandas)
+- Python (selenium, pandas, matplotlib, seaborn)
 - Airflow
 - Selenium
 - PostgreSQL
