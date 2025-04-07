@@ -10,10 +10,9 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from webdriver_manager.chrome import ChromeDriverManager
-import psycopg2
 import csv
 from datetime import datetime
-
+import os
 def get_default_chrome_options():
     options = webdriver.ChromeOptions()
     options.add_argument("--no-sandbox")
@@ -148,49 +147,37 @@ def insert_book_data_into_postgres(ti):
 
 
 def export_data_to_csv():
-    conn = psycopg2.connect(
-        dbname="literatura_books", 
-        user="airflow", 
-        password="airflow", 
-        host="172.18.0.3",  
-        port="5432"
-    )
-    
+    hook = PostgresHook(postgres_conn_id='books_connection')
+    conn = hook.get_conn()
     cursor = conn.cursor()
+    
+    output_directory = f'./dags/datasets/{datetime.now().strftime("%Y.%m.%d")}/'
+    os.makedirs(output_directory, exist_ok=True)  # Ensure folder exists
 
-    query_books = "SELECT * FROM books;"
-    cursor.execute(query_books)
-
+    # Export books
+    cursor.execute("SELECT * FROM books;")
     books_rows = cursor.fetchall()
-
     books_columns = [desc[0] for desc in cursor.description]
+    books_file_name = f'{output_directory}books_data_{datetime.now().strftime("%Y.%m.%d.%H-%M")}.csv'
 
-    output_directory = './dags/datasets/'
-    books_file_name = f'{output_directory}books_data_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv'
     with open(books_file_name, 'w', newline='', encoding='utf-8-sig') as file:
         writer = csv.writer(file)
-        writer.writerow(books_columns)  
-        writer.writerows(books_rows)   
+        writer.writerow(books_columns)
+        writer.writerows(books_rows)
 
-   
-    query_prices = "SELECT * FROM book_prices;"
-    cursor.execute(query_prices)
-
+    # Export book_prices
+    cursor.execute("SELECT * FROM book_prices;")
     prices_rows = cursor.fetchall()
-
     prices_columns = [desc[0] for desc in cursor.description]
+    prices_file_name = f'{output_directory}book_prices_data_{datetime.now().strftime("%Y.%m.%d.%H-%M")}.csv'
 
-    prices_file_name = f'{output_directory}book_prices_data_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv'
     with open(prices_file_name, 'w', newline='', encoding='utf-8-sig') as file:
         writer = csv.writer(file)
-        writer.writerow(prices_columns)  
-        writer.writerows(prices_rows)    
+        writer.writerow(prices_columns)
+        writer.writerows(prices_rows)
 
     cursor.close()
     conn.close()
-
-    print(f"Data saved to '{books_file_name}' and '{prices_file_name}'")
-
 
 default_args = {
     'owner': 'airflow',
@@ -236,7 +223,6 @@ create_table_task = SQLExecuteQueryOperator(
     """,
     dag=dag,
 )
-
 
 insert_book_data_task = PythonOperator(
     task_id='insert_book_data',
