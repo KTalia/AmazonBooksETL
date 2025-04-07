@@ -10,14 +10,16 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from webdriver_manager.chrome import ChromeDriverManager
+import psycopg2
+import csv
+from datetime import datetime
 
 def get_default_chrome_options():
     options = webdriver.ChromeOptions()
     options.add_argument("--no-sandbox")
-    # options.add_argument("--disable-gpu")
+    options.add_argument("--disable-gpu")
     options.add_argument("--headless")
     options.add_argument("--disable-dev-shm-usage")
-
 
     return options
 
@@ -25,7 +27,6 @@ def get_data_books(num_books,ti):
     # SETUP
     options = get_default_chrome_options()
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
 
     time.sleep(5)
 
@@ -87,20 +88,108 @@ def get_data_books(num_books,ti):
 
     ti.xcom_push(key='book_data', value=book_data)
 
-
-
 def insert_book_data_into_postgres(ti):
+    # Pull data from XCom
     book_data = ti.xcom_pull(key='book_data', task_ids='fetch_book_data')
     if not book_data:
         raise ValueError("No book data found")
 
+    # Convert to DataFrame and clean
+    books_df = pd.DataFrame(book_data)
+    books_df = books_df.dropna(subset=['Title'])
+    books_df = books_df[books_df['Title'].apply(lambda x: isinstance(x, str))]
+
+    # Set up database connection
     postgres_hook = PostgresHook(postgres_conn_id='books_connection')
-    insert_query = """
-    INSERT INTO books (title, author, price, category)
-    VALUES (%s, %s, %s, %s)
-    """
-    for book in book_data:
-        postgres_hook.run(insert_query, parameters=(book['Title'], book['Author'], book['Price'], book['Category']))
+    conn = postgres_hook.get_conn()
+    cursor = conn.cursor()
+    retrieved_at = datetime.now().date()
+
+    try:
+        for _, book in books_df.iterrows():
+            title = book.get('Title')
+            author = book.get('Author', None)
+            category = book.get('Category', None)
+            price = book.get('Price', None)
+
+            if not title or price is None:
+                continue
+
+            insert_book_sql = """
+            INSERT INTO books (title, author, category)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (title) DO NOTHING;
+            """
+            cursor.execute(insert_book_sql, (title, author, category))
+
+            cursor.execute("SELECT id FROM books WHERE title = %s", (title,))
+            result = cursor.fetchone()
+            if not result:
+                continue
+            book_id = result[0]
+
+            insert_price_sql = """
+            INSERT INTO book_prices (book_id, price, retrieved_at)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (book_id, retrieved_at) DO NOTHING;
+            """
+            cursor.execute(insert_price_sql, (book_id, price, retrieved_at))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        raise e
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+def export_data_to_csv():
+    conn = psycopg2.connect(
+        dbname="literatura_books", 
+        user="airflow", 
+        password="airflow", 
+        host="172.18.0.3",  
+        port="5432"
+    )
+    
+    cursor = conn.cursor()
+
+    query_books = "SELECT * FROM books;"
+    cursor.execute(query_books)
+
+    books_rows = cursor.fetchall()
+
+    books_columns = [desc[0] for desc in cursor.description]
+
+    output_directory = './dags/datasets/'
+    books_file_name = f'{output_directory}books_data_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv'
+    with open(books_file_name, 'w', newline='', encoding='utf-8-sig') as file:
+        writer = csv.writer(file)
+        writer.writerow(books_columns)  
+        writer.writerows(books_rows)   
+
+   
+    query_prices = "SELECT * FROM book_prices;"
+    cursor.execute(query_prices)
+
+    prices_rows = cursor.fetchall()
+
+    prices_columns = [desc[0] for desc in cursor.description]
+
+    prices_file_name = f'{output_directory}book_prices_data_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv'
+    with open(prices_file_name, 'w', newline='', encoding='utf-8-sig') as file:
+        writer = csv.writer(file)
+        writer.writerow(prices_columns)  
+        writer.writerows(prices_rows)    
+
+    cursor.close()
+    conn.close()
+
+    print(f"Data saved to '{books_file_name}' and '{prices_file_name}'")
 
 
 default_args = {
@@ -114,14 +203,14 @@ default_args = {
 dag = DAG(
     'fetch_and_store_books',
     default_args=default_args,
-    description='A simple DAG to fetch book data and store it in Postgres',
-    schedule_interval='@daily',
+    description='Fetch book data and store it normalized into Postgres with price tracking',
+    schedule_interval='@weekly',
 )
 
 fetch_book_data_task = PythonOperator(
     task_id='fetch_book_data',
     python_callable=get_data_books,
-    op_args=[3], 
+    op_args=[20000], 
     dag=dag,
 )
 
@@ -129,16 +218,25 @@ create_table_task = SQLExecuteQueryOperator(
     task_id='create_table',
     conn_id='books_connection',
     sql="""
+    
     CREATE TABLE IF NOT EXISTS books (
         id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
+        title TEXT NOT NULL UNIQUE,
         author TEXT,
-        price TEXT,
         category TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS book_prices (
+        id SERIAL PRIMARY KEY,
+        book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        price TEXT,
+        retrieved_at DATE NOT NULL,
+        UNIQUE(book_id, retrieved_at)
     );
     """,
     dag=dag,
 )
+
 
 insert_book_data_task = PythonOperator(
     task_id='insert_book_data',
@@ -146,4 +244,10 @@ insert_book_data_task = PythonOperator(
     dag=dag,
 )
 
-create_table_task >> fetch_book_data_task >> insert_book_data_task
+export_data_task = PythonOperator(
+    task_id='export_data_to_csv',
+    python_callable=export_data_to_csv,
+    dag=dag,
+)
+
+create_table_task >> fetch_book_data_task >> insert_book_data_task >> export_data_task
