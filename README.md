@@ -68,7 +68,25 @@ create_table --> fetch_book_data --> insert_book_data --> export_data_to_csv
 ---
 ## Power BI Dashboard
 ![dashboard](https://github.com/user-attachments/assets/23119db2-96a3-40b6-974f-ac36169925e2)
+1. **Total Unique Books:**  
+   Displays the total number of unique book titles: **20K**.
 
+2. **Average Book Price by Category:**  
+   Bar chart showing average prices across different book categories. The highest average is **990 ден** for one category, with others ranging down to about **442 ден**.
+
+3. **Count of Title by Category (top right):**  
+   Pie chart indicating the distribution of titles across categories. The dominant category **Книги на англиски јазик** holds 74.5% of the titles.
+
+4. **Count of Category by Author:**  
+   Horizontal bar chart showing how many categories each author contributes to.
+
+5. **Sum of Price with Fluctuation by Year, Month, and Day:**  
+   - Line chart visualizing daily book price fluctuations.  
+   - **Note:** I used additional dummy data for this chart since I have only 2 weeks of project data and there haven't been significant changes in this period. The chart also includes a forecasting line to estimate future trends and a trending line to visualize price movement over time.
+
+6. **Count of Title by Year, Month, and Day:**  
+   - Line chart showing how the number of book titles varies over time.  
+   - **Note:** This chart also uses dummy data, as I haven't had enough time to collect a larger dataset. As a result, visible changes are not yet apparent in this short period.
 ---
 ## Notable Challenges
 - Running Selenium and ChromeDriver in a headless Docker container
