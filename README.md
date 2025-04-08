@@ -4,7 +4,7 @@ This is a personal ETL (Extract, Transform, Load) project that automates the pro
 
 ---
 
-## 🧰 Technologies Used
+## Technologies Used
 
 - **Python** – Data processing and automation (Selenium, Pandas)
 - **Apache Airflow** – Workflow orchestration using DAGs for task scheduling
@@ -15,16 +15,28 @@ This is a personal ETL (Extract, Transform, Load) project that automates the pro
 
 ---
 
-## 🛠️ Features
+## Features
 
-- 🔁 **Automated Weekly Scraping using Airflow**
-- 💾 **Stores structured data in PostgreSQL**
-- 📤 **CSV export for Power BI**
-- 📊 **Visualizations in Power BI**
-- 🐳 **Fully containerized with Docker**
+- 🔁 Automated Weekly Scraping using Airflow
+- 💾 Stores structured data in PostgreSQL
+- 📤 CSV export for Power BI
+- 📊 Visualizations in Power BI
+- 🐳 Fully containerized with Docker
 ---
+## Project Structure
+```
+Books_ETL_Pipeline/
+│
+├── dags/                           
+│   ├── dag.py                      # Main DAG file that defines the flow of tasks
+│   ├── preprocess_data.ipynb       # Jupyter notebook for preprocessing the data
+│   └── preprocessed_data.csv       # CSV file that stores the processed data
+│
+├── Dockerfile                      # Dockerfile for containerizing the application
+├── docker-compose.yaml             # Defines the services needed for the project 
 
-## ⚙️ How It Works
+```
+## How It Works
 
 1. **Extract:**  
    Scrapes book title, author, category, and price from the Literatura.mk site using Selenium.
@@ -39,7 +51,7 @@ This is a personal ETL (Extract, Transform, Load) project that automates the pro
    - Category distribution  
    - Price outliers  
 ---
-## 🕸️ Airflow DAG Overview
+## Airflow DAG Overview
 
 The DAG `fetch_and_store_books` is scheduled to run weekly and performs the following steps:
 
@@ -54,11 +66,28 @@ Tasks are executed in the following order:
 create_table --> fetch_book_data --> insert_book_data --> export_data_to_csv
 ```
 ---
-## 🚧 Notable Challenges
+## Power BI Dashboard
+![dashboard](https://github.com/user-attachments/assets/23119db2-96a3-40b6-974f-ac36169925e2)
+
+---
+## Notable Challenges
 - Running Selenium and ChromeDriver in a headless Docker container
 - Scraping dynamically loaded content with Selenium
 - Passing data between Airflow tasks using XCom
 - Managing missing or inconsistent data during the scraping process
+---
+## Future Changes/Additions
+- **Expand Data Sources & Price Comparison** – Integrate additional websites for scraping book data and create visualizations to compare prices for the same books across different platforms.
+- **Advanced Visualizations** – Add price trend analysis and category-based insights in Power BI.
+- **Machine Learning for Pricing Predictions** Incorporate machine learning models (e.g., regression, time series forecasting) to predict future book prices or category trends based on historical data.
+
+
+
+
+
+
+
+
 
 
 
